@@ -10,7 +10,6 @@ from sqlalchemy import create_engine, func
 
 from flask import Flask, jsonify
 
-
 #################################################
 # Database Setup
 #################################################
@@ -22,8 +21,8 @@ Base = automap_base()
 Base.prepare(engine, reflect=True)
 
 # Save references to each table
-measurement = Base.classes.measurement
-station = Base.classes.station
+Measurement = Base.classes.measurement
+Station = Base.classes.station
 
 # Create our session (link) from Python to the DB
 session = Session(engine)
@@ -41,8 +40,8 @@ app = Flask(__name__)
 @app.route("/")
 def welcome():
     return (
-        f"Welcome to the Climate Station API<br/>"
-        f"Available Routes:<br/>"
+        f"Thank you for accessing my climate check API!<br/>"
+        f"The following API routes are available:<br/>"
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
@@ -52,69 +51,84 @@ def welcome():
 
 @app.route("/api/v1.0/precipitation")
 def precipitation():
-   prev_year = dt.date(2017, 8, 23) - dt.timedelta(days=365)
-   precipitation = session.query(measurement.date, measurement.prcp).\
-    filter(measurement.date >= prev_year).all()
-   precip = {date: prcp for date, prcp in precipitation}
-   session.close()
-   return jsonify(precip)
+    #session link from Python to DB
+    session = Session(engine)
+    #queries
+    year = dt.date(2017, 8, 23) - dt.timedelta(days=365)
+    precipitation = session.query(Measurement.date, Measurement.prcp).\
+    filter(Measurement.date >= year).all()
+    precip_yr = {date: prcp for date, prcp in precipitation}
+    #close Session
+    session.close()
+    #convert to json
+    return jsonify(precip_yr)
  
 
 @app.route("/api/v1.0/stations")
 def stations():
+    # session link from Python to DB
+    session = Session(engine)
+    # queries
     results = session.query(Station.station).all()
     stations = list(np.ravel(results))
+    # close session
     session.close()
+    # convert to json
     return jsonify(stations=stations)
 
 @app.route("/api/v1.0/tobs")
-def temp_monthly():
-    #Return the temperature observations (tobs) for previous year.
-    # Calculate the date 1 year ago from last date in database
-    prev_year = dt.date(2017, 8, 23) - dt.timedelta(days=365)
+def tobs():
+    # session link from Python to DB
+    session = Session(engine)
+    # Queries
+    # Perform a query to retrieve the data and precipitation scores from most active station
+    results = session.query(meas.date,meas.tobs).filter_by(station = "USC00519281").all()
+    # create empty list
+    active_tobs = []
+    # for loop
+    for date, tobs in results:
+        # create dictionary
+        tobs_d = {}
+        # fill the dictionary
+        tobs_dict[date] = tobs
+        active_tobs.append(tobs_d)
+    # convert to json
+    return jsonify(active_tobs)
 
-    # Query the primary station for all tobs from the last year
-    results = session.query(measurement.tobs).\
-        filter(measurement.station == 'USC00519281').\
-        filter(measurement.date >= prev_year).all()
-
-    # Unravel results into a 1D array and convert to a list
-    temps = list(np.ravel(results))
+@app.route("/api/v1.0/start<start>")
+def start(start):
+    # session link from Python to DB
+    session = Session(engine)
+    # Queries
+    # Perform a query to retrieve the data and precipitation scores
+    results = session.query(func.min(meas.tobs), func.avg(meas.tobs), func.max(meas.tobs)).\filter(meas.date >= start).all()
+    # close session
     session.close()
-    # Return the results
-    return jsonify(temps)
+    # create dictionary
+    temp_s = {}
+    temp_s["Min Temp"] = results[0][0]
+    temp_s["Average Temp"] = results[0][1]
+    temp_s["Max Temp"] = results[0][2]
+    # convert to json
+    return jsonify(temp_s)
 
-
-@app.route("/api/v1.0/temp/<start>")
-@app.route("/api/v1.0/temp/<start>/<end>")
-def stats(start=None, end=None):
-    ##Return TMIN, TAVG, TMAX.
-
-    # Select statement
-    sel = [func.min(measurement.tobs), func.avg(measurement.tobs), func.max(measurement.tobs)]
-    print ("=============")
-    print (start)
-    print (end)
-    print ("=============")
-    if not end:
-        # calculate TMIN, TAVG, TMAX for dates greater than start
-        results = session.query(*sel).\
-            filter(measurement.date >= start).all()
-        # Unravel results into a 1D array and convert to a list
-        temps = list(np.ravel(results))
-        session.close()
-        return jsonify(temps)
-
-    # calculate TMIN, TAVG, TMAX with start and stop
-    results = session.query(*sel).\
-        filter(measurement.date >= start).\
-        filter(measurement.date <= end).all()
-    # Unravel results into a 1D array and convert to a list
-    temps = list(np.ravel(results))
+@app.route("/api/v1.0/start<start>/end<end>")
+def end(start,end):
+    # session link from Python to DB
+    session = Session(engine)
+    # Queries
+    # Perform a query to retrieve the data and precipitation scores
+    results=session.query(func.min(meas.tobs), func.avg(meas.tobs), func.max(meas.tobs)).\filter(meas.date >= start).filter(meas.date <= end).all()
+    # close sesion
     session.close()
+    # create dictionary
+    temps = {}
+    temps["Min Temp"] = results[0][0]
+    temps["Average Temp"] = results[0][1]
+    temps["Max Temp"] = results[0][2]
+    #convert to json
     return jsonify(temps)
 
 if __name__ == '__main__':
     app.run(debug=True)
-    
     
